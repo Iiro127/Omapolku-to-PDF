@@ -111,7 +111,7 @@ public class JsonService {
         }
 
         if (!questionApiUrl.trim().isEmpty()){
-            String q = getQuestions(questionApiUrl, cookie);
+            String q = getQuestions(questionApiUrl, cookie, languageCode);
             finnishContent.append("\n").append(q);
         }
 
@@ -140,7 +140,7 @@ public class JsonService {
         }
     }
 
-    private static String getQuestions(String apiUrl, String cookie) throws Exception {
+    private static String getQuestions(String apiUrl, String cookie, Integer languageCode) throws Exception {
         JsonNode root = mapper.readTree(getJson(apiUrl, cookie));
         JsonNode pages = root.path("pages");
 
@@ -149,13 +149,13 @@ public class JsonService {
         }
 
         for (JsonNode page : pages) {
-            handleQuestionsJson(page);
+            handleQuestionsJson(page, languageCode);
         }
 
         return questions.toString();
     }
 
-    private static void handleQuestionsJson(JsonNode page){
+    private static void handleQuestionsJson(JsonNode page, Integer languageCode){
         JsonNode jsonQuestions = page.path("questions");
         if (jsonQuestions.isArray()) {
             for (JsonNode question : jsonQuestions) {
@@ -166,7 +166,7 @@ public class JsonService {
                     if (localizedTitles.isArray() && !localizedTitles.isEmpty()) {
                         for (JsonNode loc : localizedTitles) {
                             int lang = loc.path("languageCode").asInt();
-                            if (lang == 1035) {
+                            if (lang == languageCode) {
                                 String localizedContent = loc.path("content").asText();
                                 if (localizedContent != null && !localizedContent.isEmpty()) {
                                     questionTitle = localizedContent;
