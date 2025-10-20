@@ -27,15 +27,10 @@ public class HelloApplication extends Application {
         questionsApiInputField.setPromptText("Syödä kyselyn API url");
 
         CheckBox hasQuestionsCheckbox = new CheckBox("Sisältää kysymyksiä");
-        CheckBox hasVideoCheckbox = new CheckBox("Sisältää videon");
 
         hasQuestionsCheckbox.selectedProperty().addListener((obs, wasSelected, isSelected) -> {
             questionsApiInputField.setVisible(isSelected);
             questionsApiInputField.clear();
-        });
-
-        hasVideoCheckbox.selectedProperty().addListener((obs, wasSelected, isSelected) -> {
-            hasVideo.set(isSelected);
         });
 
         RadioButton finnishChoice = new RadioButton("Suomi");
@@ -105,7 +100,7 @@ public class HelloApplication extends Application {
         Button submitButton = getSubmitButton(result, cookieInputField, contentApiInputField, questionsApiInputField);
 
         VBox vbox = new VBox(20);
-        vbox.getChildren().addAll(welcomeLabel, nextPageButton, contentApiInputField, cookieInputField, finnishChoice, swedishChoice, hasVideoCheckbox, hasQuestionsCheckbox, questionsApiInputField, submitButton, result);
+        vbox.getChildren().addAll(welcomeLabel, nextPageButton, contentApiInputField, cookieInputField, finnishChoice, swedishChoice, hasQuestionsCheckbox, questionsApiInputField, submitButton, result);
 
         Scene scene = new Scene(vbox, 450, 450);
 
@@ -117,14 +112,14 @@ public class HelloApplication extends Application {
     private static Button getSubmitButton(Label result, TextField cookieInputField, TextField apiInputField, TextField questionsApiInputField) {
         Button submitButton = new Button("Submit");
         submitButton.setOnAction(e -> {
+            result.setText("Generoidaan PDF-tiedostoa...");
+
             String cookieInput = cookieInputField.getText();
             String contentApiInput = apiInputField.getText();
             String questionsApiInput = questionsApiInputField.getText();
-
-            result.setText("Generoidaan PDF-tiedostoa...");
             try {
-                String fileName = JsonService.generatePdf(cookieInput, contentApiInput, questionsApiInput, hasVideo.get(), languageCode);
-                result.setText("PDF luotu: " + fileName);
+                String fileName = JsonService.generatePdf(cookieInput, contentApiInput, questionsApiInput, languageCode);
+                result.setText(fileName);
             } catch (Exception ex) {
                 result.setText("Error occurred.");
                 throw new RuntimeException(ex);
