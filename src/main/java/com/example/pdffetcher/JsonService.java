@@ -19,43 +19,70 @@ public class JsonService {
     private static final HttpClient client = HttpClient.newHttpClient();
     private static final ObjectMapper mapper = new ObjectMapper();
     private static StringBuilder questions = new StringBuilder();
-    private static StringBuilder finnishContent = new StringBuilder();
+    private static StringBuilder allHtml = new StringBuilder();
     private static final ArrayList<String> seenQuestions = new ArrayList<>();
 
 
     public static String generatePdf(String cookie, String contentApiUrl, String questionApiUrl, Integer languageCode) throws Exception {
-        finnishContent.setLength(0);
-        questions.setLength(0);
         String filename = "";
 
-        for (String taskId : getAllTaskIds(contentApiUrl, cookie)){
-            String finnishContent = getFinnishContent("https://omapolku.terveyskyla.fi/api/treatmentfeed/gettreatmenttask/" + taskId, cookie, questionApiUrl, languageCode);
+        for (String taskId : getAllTaskIds(contentApiUrl, cookie)) {
+            questions.setLength(0);
+            seenQuestions.clear();
 
-            // Openhtmltopdf wrapping
-            String htmlDoc = """
-            <!DOCTYPE html>
-            <html xmlns="http://www.w3.org/1999/xhtml">
-              <head>
-                <meta charset="UTF-8"/>
-                <title>Therapy Export</title>
-              </head>
-              <body>
-                %s
-              </body>
-            </html>
-            """.formatted(finnishContent);
+            String finnishContent = getFinnishContent(
+                    "https://omapolku.terveyskyla.fi/api/treatmentfeed/gettreatmenttask/" + taskId,
+                    cookie,
+                    questionApiUrl,
+                    languageCode
+            ).replaceAll("(?i)<img[^>]*>", "");
 
-            filename = "Terapia_" + UUID.randomUUID() + ".pdf";
-            try (FileOutputStream os = new FileOutputStream(filename)) {
-                PdfRendererBuilder builder = new PdfRendererBuilder();
-                builder.withHtmlContent(htmlDoc, null);
-                builder.toStream(os);
-                builder.run();
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
+            allHtml.append(finnishContent).append("<div style='page-break-after: always;'></div>");
         }
-        return "Success";
+
+        // Wrap all content into a single HTML document
+                String htmlDoc = """
+        <!DOCTYPE html>
+        <html xmlns="http://www.w3.org/1999/xhtml">
+          <head>
+            <meta charset="UTF-8"/>
+            <title>Therapy Export</title>
+            <style>
+              @page { margin: 1.5cm; }
+              body { font-family: sans-serif; line-height: 1.4; }
+              h1, h2, h3 { color: #333333; }
+              .page-break { page-break-after: always; }
+            </style>
+          </head>
+          <body>
+            %s
+          </body>
+        </html>
+        """.formatted(allHtml.toString());
+
+        htmlDoc = htmlDoc
+                .replace("&ouml;", "ö")
+                .replace("&auml;", "ä")
+                .replace("&Ouml;", "Ö")
+                .replace("&Auml;", "Ä")
+                .replace("&aring;", "å")
+                .replace("&Aring;", "Å");
+
+        htmlDoc = StringEscapeUtils.unescapeHtml4(htmlDoc);
+
+        // Generate the single combined PDF
+        filename = "Terapia_" + UUID.randomUUID() + ".pdf";
+        try (FileOutputStream os = new FileOutputStream(filename)) {
+            PdfRendererBuilder builder = new PdfRendererBuilder();
+            builder.withHtmlContent(htmlDoc, null);
+            builder.toStream(os);
+            builder.run();
+            System.out.println("PDF generated successfully: " + filename);
+        } catch (IOException e) {
+            throw new RuntimeException("Error while generating PDF", e);
+        }
+
+        return "Valmista tuli!";
     }
 
     /**
@@ -91,6 +118,7 @@ public class JsonService {
      * @throws Exception
      */
     private static String getFinnishContent(String contentApiUrl, String cookie, String questionApiUrl, Integer languageCode) throws Exception {
+        StringBuilder content = new StringBuilder();
         JsonNode root = mapper.readTree(getJson(contentApiUrl, cookie));
 
         // Directly under root now
@@ -100,43 +128,43 @@ public class JsonService {
 
         boolean hasVideo = root.toString().contains("iframe") || root.toString().contains("ckeditor-html5-video");
         if (hasVideo) {
-            finnishContent.append("<i>---Sivu sisältää videon---</i> <br/><br/>");
+            content.append("<i>---Sivu sisältää videon---</i> <br/><br/>");
         }
 
 
-        handleJson(title, "title", languageCode);
-        handleJson(ingress, "ingress", languageCode);
-        handleJson(contents, "content", languageCode);
+        handleJson(content, title, "title", languageCode);
+        handleJson(content, ingress, "ingress", languageCode);
+        handleJson(content, contents, "content", languageCode);
 
-        if (finnishContent.toString().isEmpty()) {
+        if (content.toString().isEmpty()) {
             throw new RuntimeException("PDF on tyhjä.");
         }
 
         if (!questionApiUrl.trim().isEmpty()) {
             String q = getQuestions(questionApiUrl, cookie, languageCode);
-            finnishContent.append("\n").append(q);
+            content.append("\n").append(q);
         }
 
-        return finnishContent.toString();
+        return content.toString();
     }
 
 
-    private static void handleJson(JsonNode content, String type, Integer languageCode){
+    private static void handleJson(StringBuilder contents, JsonNode content, String type, Integer languageCode){
         if (content.isArray()) {
             for (JsonNode node : content) {
                 if (node.path("languageCode").asInt() == languageCode) {
                     switch (type){
                         case "title":
-                            finnishContent.append("<b>" + node.path("content").asText() + "</b><br/>");
+                            contents.append("<b>" + node.path("content").asText() + "</b><br/>");
                             break;
                         case "ingress":
-                            finnishContent.append("<i>" + node.path("content").asText() + "</i><br/>");
+                            contents.append("<i>" + node.path("content").asText() + "</i><br/>");
                             break;
                         case "content":
-                            finnishContent.append(stripUnsupportedTags(node.path("content").asText()));
+                            contents.append(stripUnsupportedTags(node.path("content").asText()));
                             break;
                     }
-                    finnishContent = new StringBuilder(StringEscapeUtils.unescapeHtml4(String.valueOf(finnishContent)));
+                    contents.append(StringEscapeUtils.unescapeHtml4(node.path("content").asText()));
                     break;
                 }
             }

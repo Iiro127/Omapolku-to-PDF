@@ -6,10 +6,7 @@ import javafx.scene.control.*;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 
-import java.util.concurrent.atomic.AtomicReference;
-
 public class HelloApplication extends Application {
-    private static final AtomicReference<Boolean> hasVideo = new AtomicReference<>(false);
     private static Integer languageCode = 1035;
 
     @Override
@@ -112,7 +109,7 @@ public class HelloApplication extends Application {
     private static Button getSubmitButton(Label result, TextField cookieInputField, TextField apiInputField, TextField questionsApiInputField) {
         Button submitButton = new Button("Submit");
         submitButton.setOnAction(e -> {
-            result.setText("Generoidaan PDF-tiedostoa...");
+            result.setText("Generoidaan PDF-tiedostoa, odota hetki...");
 
             String cookieInput = cookieInputField.getText();
             String contentApiInput = apiInputField.getText();
