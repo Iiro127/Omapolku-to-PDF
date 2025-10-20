@@ -41,7 +41,7 @@ public class JsonService {
         }
 
         // Wrap all content into a single HTML document
-                String htmlDoc = """
+        String htmlDoc = """
         <!DOCTYPE html>
         <html xmlns="http://www.w3.org/1999/xhtml">
           <head>
