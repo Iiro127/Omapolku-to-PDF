@@ -26,6 +26,7 @@ public class JsonService {
 
 
     public static String generatePdf(String cookie, String contentApiUrl, Integer languageCode) throws Exception {
+        allHtmlBuilder.setLength(0);
         String filename;
 
         for (String taskId : getAllTaskIds(contentApiUrl, cookie)) {
@@ -146,7 +147,7 @@ public class JsonService {
             if (questionnaireId != null && !questionnaireId.isBlank()) {
                 System.out.println("QuestionnaireId: " + questionnaireId);
                 String q = getQuestions(questionnaireId, cookie, languageCode);
-                content.append("<br/><br/>").append(q);
+                content.append("<br/>").append(q);
             }
         }
 
@@ -221,7 +222,7 @@ public class JsonService {
             handleQuestionsJson(out, page, languageCode);
         }
 
-        out.append(questions.toString());
+        //out.append(questions.toString());
         return out.toString();
     }
 
