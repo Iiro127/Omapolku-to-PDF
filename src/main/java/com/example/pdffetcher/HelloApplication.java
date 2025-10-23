@@ -21,14 +21,6 @@ public class HelloApplication extends Application {
 
         cookieInputField.setPromptText("Syötä cookie");
         contentApiInputField.setPromptText("Syötä API url");
-        questionsApiInputField.setPromptText("Syödä kyselyn API url");
-
-        CheckBox hasQuestionsCheckbox = new CheckBox("Sisältää kysymyksiä");
-
-        hasQuestionsCheckbox.selectedProperty().addListener((obs, wasSelected, isSelected) -> {
-            questionsApiInputField.setVisible(isSelected);
-            questionsApiInputField.clear();
-        });
 
         RadioButton finnishChoice = new RadioButton("Suomi");
         RadioButton swedishChoice = new RadioButton("Ruotsi");
@@ -97,7 +89,7 @@ public class HelloApplication extends Application {
         Button submitButton = getSubmitButton(result, cookieInputField, contentApiInputField, questionsApiInputField);
 
         VBox vbox = new VBox(20);
-        vbox.getChildren().addAll(welcomeLabel, nextPageButton, contentApiInputField, cookieInputField, finnishChoice, swedishChoice, hasQuestionsCheckbox, questionsApiInputField, submitButton, result);
+        vbox.getChildren().addAll(welcomeLabel, nextPageButton, contentApiInputField, cookieInputField, finnishChoice, swedishChoice, questionsApiInputField, submitButton, result);
 
         Scene scene = new Scene(vbox, 450, 450);
 
@@ -113,10 +105,9 @@ public class HelloApplication extends Application {
 
             String cookieInput = cookieInputField.getText();
             String contentApiInput = apiInputField.getText();
-            String questionsApiInput = questionsApiInputField.getText();
             try {
-                String fileName = JsonService.generatePdf(cookieInput, contentApiInput, questionsApiInput, languageCode);
-                result.setText(fileName);
+                String fileName = JsonService.generatePdf(cookieInput, contentApiInput, languageCode);
+                result.setText("PDF valmis: " + fileName);
             } catch (Exception ex) {
                 result.setText("Error occurred.");
                 throw new RuntimeException(ex);

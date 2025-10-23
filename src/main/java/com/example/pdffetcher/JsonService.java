@@ -23,8 +23,8 @@ public class JsonService {
     private static final ArrayList<String> seenQuestions = new ArrayList<>();
 
 
-    public static String generatePdf(String cookie, String contentApiUrl, String questionApiUrl, Integer languageCode) throws Exception {
-        String filename = "";
+    public static String generatePdf(String cookie, String contentApiUrl, Integer languageCode) throws Exception {
+        String filename;
 
         for (String taskId : getAllTaskIds(contentApiUrl, cookie)) {
             questions.setLength(0);
@@ -33,7 +33,6 @@ public class JsonService {
             String finnishContent = getFinnishContent(
                     "https://omapolku.terveyskyla.fi/api/treatmentfeed/gettreatmenttask/" + taskId,
                     cookie,
-                    questionApiUrl,
                     languageCode
             ).replaceAll("(?i)<img[^>]*>", "");
 
@@ -70,7 +69,6 @@ public class JsonService {
 
         htmlDoc = StringEscapeUtils.unescapeHtml4(htmlDoc);
 
-        // Generate the single combined PDF
         filename = "Terapia_" + UUID.randomUUID() + ".pdf";
         try (FileOutputStream os = new FileOutputStream(filename)) {
             PdfRendererBuilder builder = new PdfRendererBuilder();
@@ -82,7 +80,7 @@ public class JsonService {
             throw new RuntimeException("Error while generating PDF", e);
         }
 
-        return "Valmista tuli!";
+        return filename;
     }
 
     /**
@@ -112,16 +110,14 @@ public class JsonService {
      * Gets all finnish content from JSON
      *
      * @param contentApiUrl
-     * @param questionApiUrl
      * @param cookie
      * @return
      * @throws Exception
      */
-    private static String getFinnishContent(String contentApiUrl, String cookie, String questionApiUrl, Integer languageCode) throws Exception {
+    private static String getFinnishContent(String contentApiUrl, String cookie, Integer languageCode) throws Exception {
         StringBuilder content = new StringBuilder();
         JsonNode root = mapper.readTree(getJson(contentApiUrl, cookie));
 
-        // Directly under root now
         JsonNode contents = root.path("localizedContentObject").path("content");
         JsonNode title = root.path("localizedTitleObject").path("content");
         JsonNode ingress = root.path("localizedIngressObject").path("content");
@@ -140,8 +136,12 @@ public class JsonService {
             throw new RuntimeException("PDF on tyhjä.");
         }
 
-        if (!questionApiUrl.trim().isEmpty()) {
-            String q = getQuestions(questionApiUrl, cookie, languageCode);
+        String questionnaireId = root.path("questionnaireOriginalReference").asText();
+
+        System.out.println("Questionnaire id: " + questionnaireId);
+
+        if (questionnaireId != null) {
+            String q = getQuestions(questionnaireId, cookie, languageCode);
             content.append("\n").append(q);
         }
 
@@ -171,16 +171,23 @@ public class JsonService {
         }
     }
 
-    private static String getQuestions(String apiUrl, String cookie, Integer languageCode) throws Exception {
-        JsonNode root = mapper.readTree(getJson(apiUrl, cookie));
+    private static String getQuestions(String questionnaireId, String cookie, Integer languageCode) throws Exception {
+        JsonNode root = mapper.readTree(getJson(
+                "https://omapolku.terveyskyla.fi/api/questionnaires/getquestionnairebyoriginalreference/" + questionnaireId,
+                cookie
+        ));
+
         JsonNode pages = root.path("pages");
         StringBuilder out = new StringBuilder();
 
-        out.setLength(0); //clear
+        out.setLength(0);
 
         String questionnaireTitle = getLocalizedText(root.path("localizedTitle"), languageCode);
-        if (questionnaireTitle != null) {
-            out.append("<br/><i> ---Sisältää kyselyn: ").append(questionnaireTitle).append("---</i><br/>");
+        if (questionnaireTitle != null && !questionnaireTitle.isBlank()) {
+            System.out.println("Loaded questionnaire: " + questionnaireTitle);
+            out.append("<br/><i>--- Sisältää kyselyn: ")
+                    .append(questionnaireTitle)
+                    .append(" ---</i><br/>");
         }
 
         if (!pages.isArray() || pages.isEmpty()) {
@@ -188,11 +195,42 @@ public class JsonService {
         }
 
         for (JsonNode page : pages) {
-            handleQuestionsJson(page, languageCode);
+            handleQuestionsJson(out, page, languageCode);
         }
 
         out.append(questions.toString());
         return out.toString();
+    }
+
+
+    private static void handleQuestionsJson(StringBuilder out, JsonNode page, Integer languageCode) {
+        JsonNode jsonQuestions = page.path("questions");
+        if (jsonQuestions.isArray()) {
+            for (JsonNode question : jsonQuestions) {
+                String questionTitle = getLocalizedText(question.path("localizedTitle"), languageCode);
+                if (questionTitle == null || questionTitle.isBlank()) {
+                    questionTitle = "Kysymys (ei otsikkoa)";
+                }
+                if (!seenQuestions.contains(questionTitle)) {
+                    seenQuestions.add(questionTitle);
+                    out.append("<b>Kysymys:</b> ").append(questionTitle).append("<br/>");
+
+                    JsonNode options = question.path("options");
+                    if (options.isArray()) {
+                        for (JsonNode opt : options) {
+                            String optHeader = getLocalizedText(opt.path("localizedHeader"), languageCode);
+                            if (optHeader == null || optHeader.isBlank()) {
+                                optHeader = opt.path("header").asText("");
+                            }
+                            if (!optHeader.isBlank()) {
+                                out.append("&nbsp;&nbsp;- ").append(optHeader).append("<br/>");
+                            }
+                        }
+                    }
+                    out.append("<br/>");
+                }
+            }
+        }
     }
 
     private static String getLocalizedText(JsonNode array, Integer languageCode) {
@@ -207,37 +245,6 @@ public class JsonService {
             }
         }
         return null;
-    }
-
-    private static void handleQuestionsJson(JsonNode page, Integer languageCode){
-        JsonNode jsonQuestions = page.path("questions");
-        if (jsonQuestions.isArray()) {
-            for (JsonNode question : jsonQuestions) {
-                String questionTitle = null;
-
-                // Try localizedTitle first (since title is often null)
-                JsonNode localizedTitles = question.path("localizedTitle");
-                if (localizedTitles.isArray()) {
-                    for (JsonNode loc : localizedTitles) {
-                        if (loc.path("languageCode").asInt() == languageCode) {
-                            questionTitle = loc.path("content").asText(null);
-                            break;
-                        }
-                    }
-                }
-
-                // Fallback to "title" if localizedTitle missing
-                if (questionTitle == null || questionTitle.isBlank()) {
-                    questionTitle = question.path("title").asText("No title");
-                }
-
-                // Avoid duplicate questions
-                if (!seenQuestions.contains(questionTitle)) {
-                    seenQuestions.add(questionTitle);
-                    questions.append("Kysymys: ").append(questionTitle).append("<br/><br/>");
-                }
-            }
-        }
     }
 
     public static List<String> getAllTaskIds(String structureApiUrl, String cookie) throws Exception {
