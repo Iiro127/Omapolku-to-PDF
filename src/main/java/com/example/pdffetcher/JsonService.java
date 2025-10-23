@@ -14,6 +14,8 @@ import java.net.http.HttpResponse;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class JsonService {
     private static final HttpClient client = HttpClient.newHttpClient();
@@ -129,11 +131,7 @@ public class JsonService {
         JsonNode title = root.path("localizedTitleObject").path("content");
         JsonNode ingress = root.path("localizedIngressObject").path("content");
 
-        boolean hasVideo = root.toString().contains("iframe") || root.toString().contains("ckeditor-html5-video");
-        if (hasVideo) {
-            content.append("<i>---Sivu sisältää videon---</i> <br/><br/>");
-        }
-
+        checkVideo(contents, content, languageCode);
 
         handleJson(content, title, "title", languageCode);
         handleJson(content, ingress, "ingress", languageCode);
@@ -171,6 +169,28 @@ public class JsonService {
                     break;
                 }
             }
+        }
+    }
+
+    private static void checkVideo(JsonNode contents, StringBuilder content, Integer languageCode){
+        String videoUrl = null;
+        Pattern iframePattern = Pattern.compile("src\\s*=\\s*\"(https?://[^\"]+)\"");
+
+        for (JsonNode node : contents) {
+            if (node.path("languageCode").asInt() == languageCode) {
+                String html = node.path("content").asText();
+                Matcher m = iframePattern.matcher(html);
+                if (m.find()) {
+                    videoUrl = m.group(1);
+                    break;
+                }
+            }
+        }
+
+        if (videoUrl != null) {
+            content.append("<i>---Sivu sisältää videon---</i><br/>")
+                    .append(videoUrl)
+                    .append("<br/><br/>");
         }
     }
 
