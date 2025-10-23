@@ -102,6 +102,7 @@ public class HelloApplication extends Application {
         Button submitButton = new Button("Submit");
         submitButton.setOnAction(e -> {
             result.setText("Generoidaan PDF-tiedostoa, odota hetki...");
+            System.out.println("Generating...");
 
             String cookieInput = cookieInputField.getText();
             String contentApiInput = apiInputField.getText();

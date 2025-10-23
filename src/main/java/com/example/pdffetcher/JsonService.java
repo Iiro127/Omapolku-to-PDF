@@ -19,7 +19,7 @@ public class JsonService {
     private static final HttpClient client = HttpClient.newHttpClient();
     private static final ObjectMapper mapper = new ObjectMapper();
     private static StringBuilder questions = new StringBuilder();
-    private static StringBuilder allHtml = new StringBuilder();
+    private static StringBuilder allHtmlBuilder = new StringBuilder();
     private static final ArrayList<String> seenQuestions = new ArrayList<>();
 
 
@@ -34,10 +34,24 @@ public class JsonService {
                     "https://omapolku.terveyskyla.fi/api/treatmentfeed/gettreatmenttask/" + taskId,
                     cookie,
                     languageCode
-            ).replaceAll("(?i)<img[^>]*>", "");
+            );
 
-            allHtml.append(finnishContent).append("<div style='page-break-after: always;'></div>");
+            finnishContent = finnishContent.replaceAll("&ouml;", "ö")
+                            .replaceAll("&auml;", "ä")
+                            .replaceAll("&Ouml;", "Ö")
+                            .replaceAll("&Auml;", "Ä")
+                            .replaceAll("&aring;", "å")
+                            .replaceAll("&Aring;", "Å")
+                            .replaceAll("&(?![a-zA-Z#0-9]+;)", "&amp;")
+                            .replaceAll("(?i)<img[^>]*>", "")
+                            .replaceAll("&nbsp;", "&#160;")
+                            .replaceAll("&ensp;", "&#8194;")
+                            .replaceAll("&emsp;", "&#8195;");
+
+            allHtmlBuilder.append(finnishContent).append("<div style='page-break-after: always;'></div>");
         }
+        String allHtml = StringEscapeUtils.escapeHtml4(allHtmlBuilder.toString());
+
 
         // Wrap all content into a single HTML document
         String htmlDoc = """
@@ -57,15 +71,7 @@ public class JsonService {
             %s
           </body>
         </html>
-        """.formatted(allHtml.toString());
-
-        htmlDoc = htmlDoc
-                .replace("&ouml;", "ö")
-                .replace("&auml;", "ä")
-                .replace("&Ouml;", "Ö")
-                .replace("&Auml;", "Ä")
-                .replace("&aring;", "å")
-                .replace("&Aring;", "Å");
+        """.formatted(allHtml);
 
         htmlDoc = StringEscapeUtils.unescapeHtml4(htmlDoc);
 
@@ -95,6 +101,7 @@ public class JsonService {
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(url))
                 .header("Content-Type", "application/json")
+                .header("Accept", "application/json, text/plain, */*")
                 .header("Cookie", cookie)
                 .build();
 
@@ -136,14 +143,15 @@ public class JsonService {
             throw new RuntimeException("PDF on tyhjä.");
         }
 
-        String questionnaireId = root.path("questionnaireOriginalReference").asText();
-
-        System.out.println("Questionnaire id: " + questionnaireId);
-
-        if (questionnaireId != null) {
-            String q = getQuestions(questionnaireId, cookie, languageCode);
-            content.append("\n").append(q);
+        for (JsonNode taskNode : root) {
+            String questionnaireId = taskNode.path("questionnaireOriginalReference").asText(null);
+            if (questionnaireId != null && !questionnaireId.isBlank()) {
+                System.out.println("QuestionnaireId: " + questionnaireId);
+                String q = getQuestions(questionnaireId, cookie, languageCode);
+                content.append("<br/><br/>").append(q);
+            }
         }
+
 
         return content.toString();
     }
@@ -183,11 +191,11 @@ public class JsonService {
         out.setLength(0);
 
         String questionnaireTitle = getLocalizedText(root.path("localizedTitle"), languageCode);
-        if (questionnaireTitle != null && !questionnaireTitle.isBlank()) {
+        if (questionnaireTitle != null || !questionnaireTitle.isBlank()) {
             System.out.println("Loaded questionnaire: " + questionnaireTitle);
-            out.append("<br/><i>--- Sisältää kyselyn: ")
+            out.append("<br/>--- Sisältää kyselyn: ")
                     .append(questionnaireTitle)
-                    .append(" ---</i><br/>");
+                    .append(" ---<br/>");
         }
 
         if (!pages.isArray() || pages.isEmpty()) {
