@@ -161,18 +161,13 @@ public class JsonService {
         if (content.isArray()) {
             for (JsonNode node : content) {
                 if (node.path("languageCode").asInt() == languageCode) {
-                    switch (type){
-                        case "title":
-                            contents.append("<b>" + node.path("content").asText() + "</b><br/>");
-                            break;
-                        case "ingress":
-                            contents.append("<i>" + node.path("content").asText() + "</i><br/>");
-                            break;
-                        case "content":
-                            contents.append(stripUnsupportedTags(node.path("content").asText()));
-                            break;
+                    String text = StringEscapeUtils.unescapeHtml4(node.path("content").asText());
+
+                    switch (type) {
+                        case "title" -> contents.append("<b>").append(text).append("</b><br/>");
+                        case "ingress" -> contents.append("<i>").append(text).append("</i><br/>");
+                        case "content" -> contents.append(stripUnsupportedTags(text));
                     }
-                    contents.append(StringEscapeUtils.unescapeHtml4(node.path("content").asText()));
                     break;
                 }
             }
