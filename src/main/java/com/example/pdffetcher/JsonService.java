@@ -180,9 +180,9 @@ public class JsonService {
         for (JsonNode node : contents) {
             if (node.path("languageCode").asInt() == languageCode) {
                 String html = node.path("content").asText();
-                Matcher m = iframePattern.matcher(html);
-                if (m.find()) {
-                    videoUrl = m.group(1);
+                Matcher match = iframePattern.matcher(html);
+                if (match.find()) {
+                    videoUrl = match.group(1);
                     break;
                 }
             }
@@ -203,26 +203,32 @@ public class JsonService {
 
         JsonNode pages = root.path("pages");
         StringBuilder out = new StringBuilder();
-
         out.setLength(0);
-
-        String questionnaireTitle = getLocalizedText(root.path("localizedTitle"), languageCode);
-        if (questionnaireTitle != null || !questionnaireTitle.isBlank()) {
-            System.out.println("Loaded questionnaire: " + questionnaireTitle);
-            out.append("<br/>--- Sisältää kyselyn: ")
-                    .append(questionnaireTitle)
-                    .append(" ---<br/>");
-        }
 
         if (!pages.isArray() || pages.isEmpty()) {
             return "Kysymyksiä ei löytynyt.\n";
         }
 
         for (JsonNode page : pages) {
+            String pageTitle = getLocalizedText(page.path("localizedTitle"), languageCode);
+            String pageIngress = getLocalizedText(page.path("localizedIngress"), languageCode);
+
+            if (pageTitle != null && !pageTitle.isBlank()) {
+                System.out.println("Loaded questionnaire: " + pageTitle);
+                out.append("<br/>--- Sisältää kyselyn: ")
+                        .append(pageTitle)
+                        .append(" ---<br/>");
+            }
+
+            if (pageIngress != null && !pageIngress.isBlank()) {
+                out.append("<i>")
+                        .append(pageIngress)
+                        .append("</i><br/><br/>");
+            }
+
             handleQuestionsJson(out, page, languageCode);
         }
 
-        //out.append(questions.toString());
         return out.toString();
     }
 
@@ -232,12 +238,21 @@ public class JsonService {
         if (jsonQuestions.isArray()) {
             for (JsonNode question : jsonQuestions) {
                 String questionTitle = getLocalizedText(question.path("localizedTitle"), languageCode);
+                String questionIngress = getLocalizedText(question.path("localizedIngress"), languageCode);
                 if (questionTitle == null || questionTitle.isBlank()) {
                     questionTitle = "Kysymys (ei otsikkoa)";
                 }
                 if (!seenQuestions.contains(questionTitle)) {
                     seenQuestions.add(questionTitle);
-                    out.append("<b>Kysymys:</b> ").append(questionTitle).append("<br/>");
+                    out.append("<b>Kysymys:</b> ")
+                            .append(questionTitle)
+                            .append("<br/>");
+
+                    if (questionIngress != null && !questionIngress.isBlank()){
+                        out.append("<i>")
+                                .append(questionIngress)
+                                .append("</i><br/>");
+                    }
 
                     JsonNode options = question.path("options");
                     if (options.isArray()) {
