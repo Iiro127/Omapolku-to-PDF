@@ -12,42 +12,81 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class JsonService {
     private static final HttpClient client = HttpClient.newHttpClient();
     private static final ObjectMapper mapper = new ObjectMapper();
     private static StringBuilder questions = new StringBuilder();
-    private static StringBuilder finnishContent = new StringBuilder();
+    private static StringBuilder allHtmlBuilder = new StringBuilder();
     private static final ArrayList<String> seenQuestions = new ArrayList<>();
 
 
-    public static String generatePdf(String cookie, String contentApiUrl, String questionApiUrl, Boolean hasVideo, Integer languageCode) throws Exception {
-        finnishContent.setLength(0);
-        String finnishContent = getFinnishContent(contentApiUrl, cookie, questionApiUrl, hasVideo, languageCode);
+    public static String generatePdf(String cookie, String contentApiUrl, Integer languageCode) throws Exception {
+        allHtmlBuilder.setLength(0);
+        String filename;
 
-        // Openhtmltopdf wrapping
+        for (String taskId : getAllTaskIds(contentApiUrl, cookie)) {
+            questions.setLength(0);
+            seenQuestions.clear();
+
+            String finnishContent = getFinnishContent(
+                    "https://omapolku.terveyskyla.fi/api/treatmentfeed/gettreatmenttask/" + taskId,
+                    cookie,
+                    languageCode
+            );
+
+            finnishContent = finnishContent.replaceAll("&ouml;", "ö")
+                            .replaceAll("&auml;", "ä")
+                            .replaceAll("&Ouml;", "Ö")
+                            .replaceAll("&Auml;", "Ä")
+                            .replaceAll("&aring;", "å")
+                            .replaceAll("&Aring;", "Å")
+                            .replaceAll("&(?![a-zA-Z#0-9]+;)", "&amp;")
+                            .replaceAll("(?i)<img[^>]*>", "")
+                            .replaceAll("&nbsp;", "&#160;")
+                            .replaceAll("&ensp;", "&#8194;")
+                            .replaceAll("&emsp;", "&#8195;");
+
+            allHtmlBuilder.append(finnishContent).append("<div style='page-break-after: always;'></div>");
+        }
+        String allHtml = StringEscapeUtils.escapeHtml4(allHtmlBuilder.toString());
+
+
+        // Wrap all content into a single HTML document
         String htmlDoc = """
-            <!DOCTYPE html>
-            <html xmlns="http://www.w3.org/1999/xhtml">
-              <head>
-                <meta charset="UTF-8"/>
-                <title>Therapy Export</title>
-              </head>
-              <body>
-                %s
-              </body>
-            </html>
-            """.formatted(finnishContent);
+        <!DOCTYPE html>
+        <html xmlns="http://www.w3.org/1999/xhtml">
+          <head>
+            <meta charset="UTF-8"/>
+            <title>Therapy Export</title>
+            <style>
+              @page { margin: 1.5cm; }
+              body { font-family: sans-serif; line-height: 1.4; }
+              h1, h2, h3 { color: #333333; }
+              .page-break { page-break-after: always; }
+            </style>
+          </head>
+          <body>
+            %s
+          </body>
+        </html>
+        """.formatted(allHtml);
 
-        String filename = "Terapia_" + UUID.randomUUID() + ".pdf";
+        htmlDoc = StringEscapeUtils.unescapeHtml4(htmlDoc);
+
+        filename = "Terapia_" + UUID.randomUUID() + ".pdf";
         try (FileOutputStream os = new FileOutputStream(filename)) {
             PdfRendererBuilder builder = new PdfRendererBuilder();
             builder.withHtmlContent(htmlDoc, null);
             builder.toStream(os);
             builder.run();
+            System.out.println("PDF generated successfully: " + filename);
         } catch (IOException e) {
-            throw new RuntimeException(e);
+            throw new RuntimeException("Error while generating PDF", e);
         }
 
         return filename;
@@ -65,6 +104,7 @@ public class JsonService {
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(url))
                 .header("Content-Type", "application/json")
+                .header("Accept", "application/json, text/plain, */*")
                 .header("Cookie", cookie)
                 .build();
 
@@ -80,107 +120,193 @@ public class JsonService {
      * Gets all finnish content from JSON
      *
      * @param contentApiUrl
-     * @param questionApiUrl
      * @param cookie
      * @return
      * @throws Exception
      */
-    private static String getFinnishContent(String contentApiUrl, String cookie, String questionApiUrl, Boolean hasVideo, Integer languageCode) throws Exception {
+    private static String getFinnishContent(String contentApiUrl, String cookie, Integer languageCode) throws Exception {
+        StringBuilder content = new StringBuilder();
         JsonNode root = mapper.readTree(getJson(contentApiUrl, cookie));
-        JsonNode contents = root.path("treatmentTask")
-                .path("localizedContentObject")
-                .path("content");
-        JsonNode title = root.path("treatmentTask")
-                .path("localizedTitleObject")
-                .path("content");
-        JsonNode ingress = root.path("treatmentTask")
-                .path("localizedIngressObject")
-                .path("content");
 
-        if (hasVideo) {
-            finnishContent.append("<i>---Sivu sisältää videon---</i> <br/><br/>");
-        }
+        JsonNode contents = root.path("localizedContentObject").path("content");
+        JsonNode title = root.path("localizedTitleObject").path("content");
+        JsonNode ingress = root.path("localizedIngressObject").path("content");
 
-        handleJson(title, "title", languageCode);
-        handleJson(ingress, "ingress", languageCode);
-        handleJson(contents, "content", languageCode);
+        checkVideo(contents, content, languageCode);
 
-        if (finnishContent.toString().isEmpty()) {
+        handleJson(content, title, "title", languageCode);
+        handleJson(content, ingress, "ingress", languageCode);
+        handleJson(content, contents, "content", languageCode);
+
+        if (content.toString().isEmpty()) {
             throw new RuntimeException("PDF on tyhjä.");
-
         }
 
-        if (!questionApiUrl.trim().isEmpty()){
-            String q = getQuestions(questionApiUrl, cookie, languageCode);
-            finnishContent.append("\n").append(q);
+        for (JsonNode taskNode : root) {
+            String questionnaireId = taskNode.path("questionnaireOriginalReference").asText(null);
+            if (questionnaireId != null && !questionnaireId.isBlank()) {
+                System.out.println("QuestionnaireId: " + questionnaireId);
+                String q = getQuestions(questionnaireId, cookie, languageCode);
+                content.append("<br/>").append(q);
+            }
         }
 
-        return finnishContent.toString();
+
+        return content.toString();
     }
 
-    private static void handleJson(JsonNode content, String type, Integer languageCode){
+
+    private static void handleJson(StringBuilder contents, JsonNode content, String type, Integer languageCode){
         if (content.isArray()) {
             for (JsonNode node : content) {
                 if (node.path("languageCode").asInt() == languageCode) {
-                    switch (type){
-                        case "title":
-                            finnishContent.append("<b>" + node.path("content").asText() + "</b><br/>");
-                            break;
-                        case "ingress":
-                            finnishContent.append("<i>" + node.path("content").asText() + "</i><br/>");
-                            break;
-                        case "content":
-                            finnishContent.append(node.path("content").asText());
-                            break;
+                    String text = StringEscapeUtils.unescapeHtml4(node.path("content").asText());
+
+                    switch (type) {
+                        case "title" -> contents.append("<b>").append(text).append("</b><br/>");
+                        case "ingress" -> contents.append("<i>").append(text).append("</i><br/>");
+                        case "content" -> contents.append(stripUnsupportedTags(text));
                     }
-                    finnishContent = new StringBuilder(StringEscapeUtils.unescapeHtml4(String.valueOf(finnishContent)));
                     break;
                 }
             }
         }
     }
 
-    private static String getQuestions(String apiUrl, String cookie, Integer languageCode) throws Exception {
-        JsonNode root = mapper.readTree(getJson(apiUrl, cookie));
+    private static void checkVideo(JsonNode contents, StringBuilder content, Integer languageCode){
+        String videoUrl = null;
+        Pattern iframePattern = Pattern.compile("src\\s*=\\s*\"(https?://[^\"]+)\"");
+
+        for (JsonNode node : contents) {
+            if (node.path("languageCode").asInt() == languageCode) {
+                String html = node.path("content").asText();
+                Matcher match = iframePattern.matcher(html);
+                if (match.find()) {
+                    videoUrl = match.group(1);
+                    break;
+                }
+            }
+        }
+
+        if (videoUrl != null) {
+            content.append("<i>---Sivu sisältää videon---</i><br/>")
+                    .append(videoUrl)
+                    .append("<br/><br/>");
+        }
+    }
+
+    private static String getQuestions(String questionnaireId, String cookie, Integer languageCode) throws Exception {
+        JsonNode root = mapper.readTree(getJson(
+                "https://omapolku.terveyskyla.fi/api/questionnaires/getquestionnairebyoriginalreference/" + questionnaireId,
+                cookie
+        ));
+
         JsonNode pages = root.path("pages");
+        StringBuilder out = new StringBuilder();
+        out.setLength(0);
 
         if (!pages.isArray() || pages.isEmpty()) {
             return "Kysymyksiä ei löytynyt.\n";
         }
 
         for (JsonNode page : pages) {
-            handleQuestionsJson(page, languageCode);
+            String pageTitle = getLocalizedText(page.path("localizedTitle"), languageCode);
+            String pageIngress = getLocalizedText(page.path("localizedIngress"), languageCode);
+
+            if (pageTitle != null && !pageTitle.isBlank()) {
+                System.out.println("Loaded questionnaire: " + pageTitle);
+                out.append("<br/>--- Sisältää kyselyn: ")
+                        .append(pageTitle)
+                        .append(" ---<br/>");
+            }
+
+            if (pageIngress != null && !pageIngress.isBlank()) {
+                out.append("<i>")
+                        .append(pageIngress)
+                        .append("</i><br/><br/>");
+            }
+
+            handleQuestionsJson(out, page, languageCode);
         }
 
-        return questions.toString();
+        return out.toString();
     }
 
-    private static void handleQuestionsJson(JsonNode page, Integer languageCode){
+
+    private static void handleQuestionsJson(StringBuilder out, JsonNode page, Integer languageCode) {
         JsonNode jsonQuestions = page.path("questions");
         if (jsonQuestions.isArray()) {
             for (JsonNode question : jsonQuestions) {
-                String questionTitle = question.path("title").asText("No title");
+                String questionTitle = getLocalizedText(question.path("localizedTitle"), languageCode);
+                String questionIngress = getLocalizedText(question.path("localizedIngress"), languageCode);
+                if (questionTitle == null || questionTitle.isBlank()) {
+                    questionTitle = "Kysymys (ei otsikkoa)";
+                }
+                if (!seenQuestions.contains(questionTitle)) {
+                    seenQuestions.add(questionTitle);
+                    out.append("<b>Kysymys:</b> ")
+                            .append(questionTitle)
+                            .append("<br/>");
 
-                if (seenQuestions.contains(questionTitle)){
-                    JsonNode localizedTitles = question.path("localizedTitle");
-                    if (localizedTitles.isArray() && !localizedTitles.isEmpty()) {
-                        for (JsonNode loc : localizedTitles) {
-                            int lang = loc.path("languageCode").asInt();
-                            if (lang == languageCode) {
-                                String localizedContent = loc.path("content").asText();
-                                if (localizedContent != null && !localizedContent.isEmpty()) {
-                                    questionTitle = localizedContent;
-                                    break;
-                                }
+                    if (questionIngress != null && !questionIngress.isBlank()){
+                        out.append("<i>")
+                                .append(questionIngress)
+                                .append("</i><br/>");
+                    }
+
+                    JsonNode options = question.path("options");
+                    if (options.isArray()) {
+                        for (JsonNode opt : options) {
+                            String optHeader = getLocalizedText(opt.path("localizedHeader"), languageCode);
+                            if (optHeader == null || optHeader.isBlank()) {
+                                optHeader = opt.path("header").asText("");
+                            }
+                            if (!optHeader.isBlank()) {
+                                out.append("&nbsp;&nbsp;- ").append(optHeader).append("<br/>");
                             }
                         }
                     }
-                } else {
-                    seenQuestions.add(questionTitle);
+                    out.append("<br/>");
                 }
-
-                questions.append("Kysymys: ").append(questionTitle).append("<br/>").append("<br/>");
             }
         }
+    }
+
+    private static String getLocalizedText(JsonNode array, Integer languageCode) {
+        if (array != null && array.isArray()) {
+            for (JsonNode loc : array) {
+                if (loc.path("languageCode").asInt() == languageCode) {
+                    String content = loc.path("content").asText(null);
+                    if (content != null && !content.isBlank()) {
+                        return content;
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    public static List<String> getAllTaskIds(String structureApiUrl, String cookie) throws Exception {
+        String json = getJson(structureApiUrl, cookie);
+        JsonNode root = mapper.readTree(json);
+
+        List<String> taskIds = new ArrayList<>();
+
+        if (root.isArray()) {
+            for (JsonNode taskNode : root) {
+                String taskId = taskNode.path("taskId").asText(null);
+                if (taskId != null && !taskId.isBlank()) {
+                    taskIds.add(taskId);
+                }
+            }
+        }
+
+        return taskIds;
+    }
+
+
+    private static String stripUnsupportedTags(String html) {
+        return html.replaceAll("(?i)<img[^>]*>", "")
+                .replaceAll("(?i)<iframe[^>]*>.*?</iframe>", "");
     }
 }
