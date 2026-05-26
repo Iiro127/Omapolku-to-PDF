@@ -30,7 +30,7 @@ public class JsonService {
     private static final ArrayList<String> seenQuestions = new ArrayList<>();
 
 
-    public static String generatePdf(String cookie, String contentApiUrl, Integer languageCode) throws Exception {
+    public static String generatePdf(String cookie, String contentApiUrl, Integer languageCode, String outputDir) throws Exception {
         allHtmlBuilder.setLength(0);
         String filename;
 
@@ -84,23 +84,20 @@ public class JsonService {
         htmlDoc = StringEscapeUtils.unescapeHtml4(htmlDoc);
 
         filename = "Terapia_" + UUID.randomUUID() + ".pdf";
-        java.nio.file.Path desktop = java.nio.file.Paths.get(System.getProperty("user.home"), "Desktop");
-        try { java.nio.file.Files.createDirectories(desktop); } catch (Exception ignored) {}
-        java.nio.file.Path outFile = desktop.resolve(filename);
-        try (java.io.FileOutputStream os = new java.io.FileOutputStream(outFile.toFile())) {
+        try (FileOutputStream os = new FileOutputStream(filename)) {
             PdfRendererBuilder builder = new PdfRendererBuilder();
             builder.withHtmlContent(htmlDoc, null);
             builder.toStream(os);
             builder.run();
-            System.out.println("PDF generated successfully: " + outFile);
+            System.out.println("PDF generated successfully: " + filename);
         } catch (IOException e) {
             throw new RuntimeException("Error while generating PDF", e);
         }
 
-        return outFile.toString();
+        return filename;
     }
 
-    public static String generateDocx(String cookie, String contentApiUrl, Integer languageCode) throws Exception {
+    public static String generateDocx(String cookie, String contentApiUrl, Integer languageCode, String outputDir) throws Exception {
         allHtmlBuilder.setLength(0);
         String filename;
 
@@ -139,11 +136,8 @@ public class JsonService {
         String text = jsoupDoc.text().replace("\\n", System.lineSeparator());
 
         filename = "Terapia_" + UUID.randomUUID() + ".docx";
-        java.nio.file.Path desktop = java.nio.file.Paths.get(System.getProperty("user.home"), "Desktop");
-        try { java.nio.file.Files.createDirectories(desktop); } catch (Exception ignored) {}
-        java.nio.file.Path outFile = desktop.resolve(filename);
         XWPFDocument docx = new XWPFDocument();
-        try (java.io.FileOutputStream out = new java.io.FileOutputStream(outFile.toFile())) {
+        try (FileOutputStream out = new FileOutputStream(filename)) {
             String[] lines = text.split(System.lineSeparator());
             for (String line : lines) {
                 XWPFParagraph p = docx.createParagraph();
@@ -151,7 +145,7 @@ public class JsonService {
                 run.setText(line == null ? "" : line);
             }
             docx.write(out);
-            System.out.println("DOCX generated successfully: " + outFile);
+            System.out.println("DOCX generated successfully: " + filename);
         } catch (IOException e) {
             throw new RuntimeException("Error while generating DOCX", e);
         } finally {
@@ -160,7 +154,7 @@ public class JsonService {
             } catch (IOException ignored) {}
         }
 
-        return outFile.toString();
+        return filename;
     }
 
     /**

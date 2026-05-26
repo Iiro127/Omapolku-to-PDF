@@ -5,6 +5,8 @@ import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
+import javafx.stage.DirectoryChooser;
+import java.io.File;
 import java.util.Map;
 import java.util.LinkedHashMap;
 import java.util.function.Supplier;
@@ -52,12 +54,29 @@ public class HelloApplication extends Application {
             }
         });
 
-        Button submitButton = getSubmitButton(result, cookieInputField, () -> apiMap.get(contentApiInputField.getValue()), () -> formatChoice.getValue());
+        // Save location chooser
+        java.nio.file.Path defaultDesktop = java.nio.file.Paths.get(System.getProperty("user.home"), "Desktop");
+        String defaultPath = defaultDesktop.toString();
+        TextField savePathField = new TextField(defaultPath);
+        savePathField.setEditable(false);
+        Button chooseFolderButton = new Button("Valitse kansio");
+        chooseFolderButton.setOnAction(ev -> {
+            DirectoryChooser chooser = new DirectoryChooser();
+            chooser.setTitle("Valitse tallennuskansio");
+            java.io.File initial = new java.io.File(savePathField.getText());
+            if (initial.exists() && initial.isDirectory()) chooser.setInitialDirectory(initial);
+            java.io.File selected = chooser.showDialog(primaryStage);
+            if (selected != null) {
+                savePathField.setText(selected.getAbsolutePath());
+            }
+        });
+
+        Button submitButton = getSubmitButton(result, cookieInputField, () -> apiMap.get(contentApiInputField.getValue()), () -> formatChoice.getValue(), () -> savePathField.getText());
 
         VBox vbox = new VBox(20);
-        vbox.getChildren().addAll(welcomeLabel, instructions, contentApiInputField, formatChoice, cookieInputField, finnishChoice, swedishChoice, submitButton, result);
+        vbox.getChildren().addAll(welcomeLabel, instructions, contentApiInputField, formatChoice, savePathField, chooseFolderButton, cookieInputField, finnishChoice, swedishChoice, submitButton, result);
 
-        Scene scene = new Scene(vbox, 450, 450);
+        Scene scene = new Scene(vbox, 500, 500);
 
         primaryStage.setTitle("PDF Fetcher");
         primaryStage.setScene(scene);
@@ -78,11 +97,14 @@ public class HelloApplication extends Application {
         return apiMap;
     }
 
-    private static Button getSubmitButton(Label result, TextField cookieInputField, Supplier<String> apiUrlSupplier, Supplier<String> formatSupplier) {
+    private static Button getSubmitButton(Label result, TextField cookieInputField, Supplier<String> apiUrlSupplier, Supplier<String> formatSupplier, Supplier<String> saveDirSupplier) {
         Button submitButton = new Button("Submit");
         submitButton.setOnAction(e -> {
             String format = formatSupplier.get();
             if (format == null) format = "PDF";
+            String saveDir = saveDirSupplier.get();
+            if (saveDir == null || saveDir.isBlank()) saveDir = java.nio.file.Paths.get(System.getProperty("user.home"), "Desktop").toString();
+
             result.setText("Generointi käynnissä, odota hetki...");
             System.out.println("Generating " + format + "...");
 
@@ -96,11 +118,11 @@ public class HelloApplication extends Application {
                 String fileName;
                 if ("DOCX".equalsIgnoreCase(format)) {
                     result.setText("Generoidaan DOCX-tiedostoa, odota hetki...");
-                    fileName = JsonService.generateDocx(cookieInput, contentApiInput, languageCode);
+                    fileName = JsonService.generateDocx(cookieInput, contentApiInput, languageCode, saveDir);
                     result.setText("DOCX valmis: " + fileName);
                 } else {
                     result.setText("Generoidaan PDF-tiedostoa, odota hetki...");
-                    fileName = JsonService.generatePdf(cookieInput, contentApiInput, languageCode);
+                    fileName = JsonService.generatePdf(cookieInput, contentApiInput, languageCode, saveDir);
                     result.setText("PDF valmis: " + fileName);
                 }
             } catch (Exception ex) {
