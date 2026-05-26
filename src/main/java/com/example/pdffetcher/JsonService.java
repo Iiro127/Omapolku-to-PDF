@@ -4,6 +4,11 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.openhtmltopdf.pdfboxout.PdfRendererBuilder;
 import org.apache.commons.text.StringEscapeUtils;
+import org.apache.poi.xwpf.usermodel.XWPFDocument;
+import org.apache.poi.xwpf.usermodel.XWPFParagraph;
+import org.apache.poi.xwpf.usermodel.XWPFRun;
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
 
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -87,6 +92,66 @@ public class JsonService {
             System.out.println("PDF generated successfully: " + filename);
         } catch (IOException e) {
             throw new RuntimeException("Error while generating PDF", e);
+        }
+
+        return filename;
+    }
+
+    public static String generateDocx(String cookie, String contentApiUrl, Integer languageCode) throws Exception {
+        allHtmlBuilder.setLength(0);
+        String filename;
+
+        for (String taskId : getAllTaskIds(contentApiUrl, cookie)) {
+            questions.setLength(0);
+            seenQuestions.clear();
+
+            String finnishContent = getFinnishContent(
+                    "https://omapolku.terveyskyla.fi/api/treatmentfeed/gettreatmenttask/" + taskId,
+                    cookie,
+                    languageCode
+            );
+
+            finnishContent = finnishContent.replaceAll("&ouml;", "ö")
+                            .replaceAll("&auml;", "ä")
+                            .replaceAll("&Ouml;", "Ö")
+                            .replaceAll("&Auml;", "Ä")
+                            .replaceAll("&aring;", "å")
+                            .replaceAll("&Aring;", "Å")
+                            .replaceAll("&(?![a-zA-Z#0-9]+;)", "&amp;")
+                            .replaceAll("(?i)<img[^>]*>", "")
+                            .replaceAll("&nbsp;", "&#160;")
+                            .replaceAll("&ensp;", "&#8194;")
+                            .replaceAll("&emsp;", "&#8195;");
+
+            allHtmlBuilder.append(finnishContent).append("<div style='page-break-after: always;'></div>");
+        }
+
+        String allHtml = StringEscapeUtils.unescapeHtml4(allHtmlBuilder.toString());
+
+        // Convert HTML to plain text while keeping line breaks
+        Document jsoupDoc = Jsoup.parse(allHtml);
+        jsoupDoc.outputSettings().prettyPrint(false);
+        jsoupDoc.select("br").append("\\n");
+        jsoupDoc.select("p").prepend("\\n");
+        String text = jsoupDoc.text().replace("\\n", System.lineSeparator());
+
+        filename = "Terapia_" + UUID.randomUUID() + ".docx";
+        XWPFDocument docx = new XWPFDocument();
+        try (FileOutputStream out = new FileOutputStream(filename)) {
+            String[] lines = text.split(System.lineSeparator());
+            for (String line : lines) {
+                XWPFParagraph p = docx.createParagraph();
+                XWPFRun run = p.createRun();
+                run.setText(line == null ? "" : line);
+            }
+            docx.write(out);
+            System.out.println("DOCX generated successfully: " + filename);
+        } catch (IOException e) {
+            throw new RuntimeException("Error while generating DOCX", e);
+        } finally {
+            try {
+                docx.close();
+            } catch (IOException ignored) {}
         }
 
         return filename;

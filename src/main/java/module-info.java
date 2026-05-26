@@ -7,6 +7,8 @@ module com.example.pdffetcher {
     requires org.apache.commons.text;
     requires java.net.http;
     requires openhtmltopdf.pdfbox;
+    requires org.apache.poi.ooxml;
+    requires org.jsoup;
 
     opens com.example.pdffetcher to javafx.fxml;
     exports com.example.pdffetcher;
