@@ -84,17 +84,20 @@ public class JsonService {
         htmlDoc = StringEscapeUtils.unescapeHtml4(htmlDoc);
 
         filename = "Terapia_" + UUID.randomUUID() + ".pdf";
-        try (FileOutputStream os = new FileOutputStream(filename)) {
+        java.nio.file.Path desktop = java.nio.file.Paths.get(System.getProperty("user.home"), "Desktop");
+        try { java.nio.file.Files.createDirectories(desktop); } catch (Exception ignored) {}
+        java.nio.file.Path outFile = desktop.resolve(filename);
+        try (java.io.FileOutputStream os = new java.io.FileOutputStream(outFile.toFile())) {
             PdfRendererBuilder builder = new PdfRendererBuilder();
             builder.withHtmlContent(htmlDoc, null);
             builder.toStream(os);
             builder.run();
-            System.out.println("PDF generated successfully: " + filename);
+            System.out.println("PDF generated successfully: " + outFile);
         } catch (IOException e) {
             throw new RuntimeException("Error while generating PDF", e);
         }
 
-        return filename;
+        return outFile.toString();
     }
 
     public static String generateDocx(String cookie, String contentApiUrl, Integer languageCode) throws Exception {
@@ -136,8 +139,11 @@ public class JsonService {
         String text = jsoupDoc.text().replace("\\n", System.lineSeparator());
 
         filename = "Terapia_" + UUID.randomUUID() + ".docx";
+        java.nio.file.Path desktop = java.nio.file.Paths.get(System.getProperty("user.home"), "Desktop");
+        try { java.nio.file.Files.createDirectories(desktop); } catch (Exception ignored) {}
+        java.nio.file.Path outFile = desktop.resolve(filename);
         XWPFDocument docx = new XWPFDocument();
-        try (FileOutputStream out = new FileOutputStream(filename)) {
+        try (java.io.FileOutputStream out = new java.io.FileOutputStream(outFile.toFile())) {
             String[] lines = text.split(System.lineSeparator());
             for (String line : lines) {
                 XWPFParagraph p = docx.createParagraph();
@@ -145,7 +151,7 @@ public class JsonService {
                 run.setText(line == null ? "" : line);
             }
             docx.write(out);
-            System.out.println("DOCX generated successfully: " + filename);
+            System.out.println("DOCX generated successfully: " + outFile);
         } catch (IOException e) {
             throw new RuntimeException("Error while generating DOCX", e);
         } finally {
@@ -154,7 +160,7 @@ public class JsonService {
             } catch (IOException ignored) {}
         }
 
-        return filename;
+        return outFile.toString();
     }
 
     /**
