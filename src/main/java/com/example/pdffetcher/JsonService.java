@@ -30,7 +30,7 @@ public class JsonService {
     private static final ArrayList<String> seenQuestions = new ArrayList<>();
 
 
-    public static String generatePdf(String cookie, String contentApiUrl, Integer languageCode, String outputDir) throws Exception {
+    public static String generatePdf(String cookie, String contentApiUrl, Integer languageCode) throws Exception {
         allHtmlBuilder.setLength(0);
         String filename;
 
@@ -97,7 +97,7 @@ public class JsonService {
         return filename;
     }
 
-    public static String generateDocx(String cookie, String contentApiUrl, Integer languageCode, String outputDir) throws Exception {
+    public static String generateDocx(String cookie, String contentApiUrl, Integer languageCode) throws Exception {
         allHtmlBuilder.setLength(0);
         String filename;
 
