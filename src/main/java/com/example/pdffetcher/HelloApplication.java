@@ -5,6 +5,8 @@ import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
+import java.util.Map;
+import java.util.LinkedHashMap;
 
 public class HelloApplication extends Application {
     private static Integer languageCode = 1035;
@@ -21,11 +23,12 @@ public class HelloApplication extends Application {
 
         cookieInputField.setPromptText("Syötä cookie");
         contentApiInputField.setPromptText("Valitse API URL");
-        String[] apiUrls = {
-            "https://api.example.com/content",
-            "https://staging.api.example.com/content"
-        };
-        contentApiInputField.getItems().addAll(apiUrls);
+
+        Map<String, String> apiMap = new LinkedHashMap<>();
+        apiMap.put("Production", "https://api.example.com/content");
+        apiMap.put("Staging", "https://staging.api.example.com/content");
+        // Add descriptive names to the dropdown (preserves insertion order)
+        contentApiInputField.getItems().addAll(apiMap.keySet());
 
         RadioButton finnishChoice = new RadioButton("Suomi");
         RadioButton swedishChoice = new RadioButton("Ruotsi");
@@ -65,7 +68,7 @@ public class HelloApplication extends Application {
             backButton.setOnAction(ev -> start(primaryStage));
         });
 
-        Button submitButton = getSubmitButton(result, cookieInputField, contentApiInputField, questionsApiInputField);
+        Button submitButton = getSubmitButton(result, cookieInputField, contentApiInputField, questionsApiInputField, apiMap);
 
         VBox vbox = new VBox(20);
         vbox.getChildren().addAll(welcomeLabel, nextPageButton, contentApiInputField, cookieInputField, finnishChoice, swedishChoice, questionsApiInputField, submitButton, result);
@@ -77,16 +80,21 @@ public class HelloApplication extends Application {
         primaryStage.show();
     }
 
-    private static Button getSubmitButton(Label result, TextField cookieInputField, ComboBox<String> apiInputField, TextField questionsApiInputField) {
+    private static Button getSubmitButton(Label result, TextField cookieInputField, ComboBox<String> apiInputField, TextField questionsApiInputField, Map<String, String> apiMap) {
         Button submitButton = new Button("Submit");
         submitButton.setOnAction(e -> {
             result.setText("Generoidaan PDF-tiedostoa, odota hetki...");
             System.out.println("Generating...");
 
             String cookieInput = cookieInputField.getText();
-            String contentApiInput = apiInputField.getValue();
-            if (contentApiInput == null) {
+            String selectedName = apiInputField.getValue();
+            if (selectedName == null) {
                 result.setText("Valitse API URL.");
+                return;
+            }
+            String contentApiInput = apiMap.get(selectedName);
+            if (contentApiInput == null) {
+                result.setText("Valittu API ei löydy.");
                 return;
             }
             try {
