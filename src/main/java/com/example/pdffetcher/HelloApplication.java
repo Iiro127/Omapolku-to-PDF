@@ -15,12 +15,17 @@ public class HelloApplication extends Application {
         Label result = new Label("Odotetaan syötteitä...");
 
         TextField cookieInputField = new TextField();
-        TextField contentApiInputField = new TextField();
+        ComboBox<String> contentApiInputField = new ComboBox<>();
         TextField questionsApiInputField = new TextField();
         questionsApiInputField.setVisible(false);
 
         cookieInputField.setPromptText("Syötä cookie");
-        contentApiInputField.setPromptText("Syötä API url");
+        contentApiInputField.setPromptText("Valitse API URL");
+        String[] apiUrls = {
+            "https://api.example.com/content",
+            "https://staging.api.example.com/content"
+        };
+        contentApiInputField.getItems().addAll(apiUrls);
 
         RadioButton finnishChoice = new RadioButton("Suomi");
         RadioButton swedishChoice = new RadioButton("Ruotsi");
@@ -72,14 +77,18 @@ public class HelloApplication extends Application {
         primaryStage.show();
     }
 
-    private static Button getSubmitButton(Label result, TextField cookieInputField, TextField apiInputField, TextField questionsApiInputField) {
+    private static Button getSubmitButton(Label result, TextField cookieInputField, ComboBox<String> apiInputField, TextField questionsApiInputField) {
         Button submitButton = new Button("Submit");
         submitButton.setOnAction(e -> {
             result.setText("Generoidaan PDF-tiedostoa, odota hetki...");
             System.out.println("Generating...");
 
             String cookieInput = cookieInputField.getText();
-            String contentApiInput = apiInputField.getText();
+            String contentApiInput = apiInputField.getValue();
+            if (contentApiInput == null) {
+                result.setText("Valitse API URL.");
+                return;
+            }
             try {
                 String fileName = JsonService.generatePdf(cookieInput, contentApiInput, languageCode);
                 result.setText("PDF valmis: " + fileName);
